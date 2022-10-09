@@ -1,0 +1,39 @@
+#include "mbed.h"
+
+DigitalOut nbusy(p5); 
+BusInOut podaci(p6,p7,p8,p9,p10,p11,p12,p13,p14);
+DigitalIn RnW(p15); 
+DigitalIn E(p16); 
+
+int main() {
+	float temp = 0, tmp;
+	int br = 0, N;
+	const int t_sample = 5; //sample time
+	int E_prev = 0;
+	
+	nbusy = 0; //cekaj prvo mjerenje
+	podaci.output();
+	
+	N = 15e6/t_sample;
+	
+	while (1) {
+		if (br>=N) {
+			nbusy = 0;
+			tmp = izmjeri_temp();
+			if (tmp >= -20 && tmp <= 150) {
+				temp = tmp;
+			}
+			nbusy = 1;
+			br = 0;
+		}
+		
+		if (RnW == 1 && E_prev == 0 && E == 1) {
+			wait_us(1);
+			podaci = 0b111111111 & ((short) temp);
+		}
+		
+		br++;
+		E_prev = E;
+		wait_us(t_sample);	
+	}
+}

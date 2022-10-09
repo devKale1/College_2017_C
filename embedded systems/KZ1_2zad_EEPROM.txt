@@ -1,0 +1,32 @@
+#include "mbed.h"
+
+BusOut adresa(p8, p9, ..., p20);
+BusOut data(p21, p22, ..., p28);
+DigitalOut nWE(p5);
+DigitalOut nOE(p7);
+DigitalOut nCE(p6);
+
+void spremi_podatak(int adr, char pod) {
+	nOE = 1;
+	adresa = adr;
+	nCE = 0;
+	wait_us(10);
+	nWE = 0;
+	wait_us(10);
+	data = pod;
+	wait_us(10);
+	nWE = 1;
+	wait_us(10);
+	nOE = 0;
+	nCE = 1;
+}
+
+int main(){
+	nOE = 0;
+	nCE = 1;
+	nWE = 1;
+	while(1) {
+		spremi_podatak(0x123,0xFC);
+		//wait(1);
+	}
+}

@@ -1,0 +1,373 @@
+6. LABOS KTM.
+
+RJEŠAVAJU SE 1. ABC, 3, 4 A I B, 5 
+
+1. A
+
+#include "mbed.h"
+//master mbed
+Serial uart(p28, p27);
+int main() {
+
+ uart.baud(100000);
+ uart.format(8, SerialBase::None ,1); //broj podatkovnih bitova,
+                   // paritet, broj stop bitova
+
+ while(1) {
+     
+      uart.putc(0x93); //posalji podatak 93h //10010011
+      wait_us(150); //CEKAJ 150 mikro sekundi
+ }
+}
+
+
+
+
+
+
+
+#include "mbed.h"
+//slave
+     Serial uart(p13, p14);
+     BusOut ledice(LED4, LED3, LED2, LED1);
+int main() {
+ 
+ char pod;
+ int brojac, maska;
+
+ uart.baud(100000);
+ uart.format(8, SerialBase::None ,1);
+
+ while(1) {
+ if (uart.readable()==1) {   //ako je 1 podatak je primljen 
+ pod = uart.getc();          //spremi u pod, podatak koji si primio
+ brojac = 0;
+ maska = 0x01;
+ for (int i=0;i<8;i++) {
+ if (pod & maska)     
+ brojac++;
+ maska = maska << 1;
+ }
+ }
+ ledice = brojac;
+ }
+}
+
+
+
+? Prenosi li se komunikacijskom linijom prvo najznacajniji bit ili najmanje-znacajni bit?
+
+NAJMANJE ZNACAJNI BIT .
+
+? Identificirajte START, STOP bit na komunikacijskoj liniji.
+START JE U 0, ONDA IDE    11001001 i  ostalo je u 1(stop bit )
+
+? Odredite brzinu prijenosa mjereci vrijeme potrebno za prijenos jednog bita. Koliko vremena pri ovoj
+brzini rada treba da bi završio prijenos jednog bajta podatka komunikacijskom linijom? Koliko traje citav
+prijenos jednog bajta zajedno sa start, parity i stop bitovima?
+
+za jedan bit T=10µ sekundi.  brzina=1/10µsekundi= 100kBit/s
+
+? Promijenite paritet u parni, pronadite paritetni bit i provjerite njegovu vrijednost slanjem podatka 93h i
+91h. I na slave mbedu morate promijeniti znacajke komunikacije!
+
+To mijenjaš gore kod SerialBase::None promjenis None u Even 
+
+Znaci, ako je broj "1" u podatku neparan paritetni bit bude 0, inace bude 1 
+
+Tak da bu signal zgledel, start bit u 0, onaj podatak, i onda bude paritetni bit 1 , i stop 1
+
+znaci preporucam samo jednog najti na osciloskopu , najbolje zadnjeg ostale nacrtati i to je to
+
+? Promijenite paritet u neparni, pronadite paritetni bit i provjerite njegovu vrijednost slanjem podatka 93h i
+
+91h  isto tak, i ovo je 91h je 0x91 al mislim da to znaš.
+
+
+
+
+
+1. B
+
+#include "mbed.h"
+//master
+Serial uart(p28, p27);
+Serial pc(USBTX, USBRX);
+Ticker tick;
+char pod = 0;
+void send() {
+ uart.putc(pod);
+}
+int main() {
+
+ uart.baud(100000);
+ uart.format(8, SerialBase::Odd ,1);
+
+ tick.attach_us(&send,500000);
+
+ while(1) {
+ pc.printf("Pali koju ledicu?: ");
+ pc.scanf("%d",&pod);
+ pc.printf("Pali se ledica broj: %d!\n",pod);
+ }
+}
+
+
+
+#include "mbed.h"
+//slave
+Serial uart(p13, p14);
+BusOut ledice(LED1, LED2, LED3, LED4);
+int main() {
+ char pod;
+
+ uart.baud(100000);
+ uart.format(8, SerialBase::Odd ,1);
+
+ while(1) {
+ if (uart.readable()==1) {
+ pod = uart.getc();
+switch (pod) {
+ case 1: ledice = 1; break;
+ case 2: ledice = 2; break;
+ case 3: ledice = 4; break;
+ case 4: ledice = 8; break;
+ default: ledice = 0; break;
+ }
+ }
+
+ }
+}
+
+
+U ovom zadatku, otvaraš 2 tera terma, jedan za master mbed, drugi za slave mbed.
+
+? Postavite paritet na slave mbedu u parni. Što se dogada ako paritet nije isti na masteru i slaveu?
+
+Komunikacija se obavlja normalno. Zbog ovoga : 
+U gornjem programu za slave mbed unutar funkcije fun() provjerava se treci bit u LSR registru (engl. Line
+Status Register) koji se zove Parity Error (PE) bit koji se postavlja u jedinicu ako provjera pariteta
+primljenog podatka rezultira pogrešnim paritetom4
+. Provjera PE bita u LSR registru UART sucelja koje se
+koristi je jedini nacin kako provjeriti je li primljeni podatak valjan. Citanje podatka iz meduspremnika je
+uvijek moguce napraviti i nece biti onemoguceno ako je primljen krivi podatak, što možete vidjeti na slave
+mbedu na kojem svijetli ledica koju ste htjeli upaliti. Zato dodatno uvijek treba provjeravati PE bit u LSR
+registru prema gornjem primjeru
+
+
+
+
+
+
+? Postavite iste paritet na masteru i slaveu. Promijenite brzinu komunikacije na slave mbedu na dvostruko
+manju vrijednost. Funkcionira li komunikacija dobro?
+
+
+Ne funkcionira kad se brzina smanji na pola 
+
+? Promijenite brzinu komunikacije na oba mbeda na 1 Mbit/s i provjerite funkcionira li komunikacija.
+Pronadite u podatkovnim tablicama mbed mikrokontrolera
+koja je maksimalna brzina prijenosa UART
+sucelja.
+
+Komunikacija funnkcionira. 30.stranica datasheeta, max uart = 6,25 Mbit/s
+
+
+
+1.c
+
+
+#include "mbed.h"
+//slave
+Serial uart(p13, p14);
+BusOut ledice(LED1, LED2, LED3, LED4);
+char pod;
+void fun() {
+ int led_prev;
+
+ if (LPC_UART1->LSR & 0x04) { //provjeri paritet
+ led_prev = ledice;
+ ledice = 0xF;
+ wait_ms(100);
+ ledice = led_prev;
+ }
+
+ pod = uart.getc();
+ switch (pod) {
+ case 1: ledice = 1; break;
+ case 2: ledice = 2; break;
+ case 3: ledice = 4; break;
+ case 4: ledice = 8; break;
+ default: ledice = 0; break;
+ }
+}
+int main() {
+
+ uart.baud(1000000);
+ uart.format(8, SerialBase::Odd ,1);
+
+ uart.attach(&fun, Serial::RxIrq);
+
+ while(1) {
+     }
+     }
+ 
+
+ Promijenite paritet na slaveu u parni i ispitajte funkcionira li komunikacija ispravno. Ako ledice na slave
+mbedu pocnu treperiti to znaci da je provjera pariteta rezultirala greškom. 
+
+lEDICE treperiju, provjera pariteta je pokazala grešku
+
+
+
+3. ZADATAK 
+
+
+#include "mbed.h"
+// master
+BusOut ledice(LED4,LED3,LED2,LED1);
+BusOut led_vanjske(p21,p22,p23,p24);
+BusIn  datain(p20,p19,p18,p17);
+Serial uart(p28,p27);
+
+int main () {
+    char pod;
+    //115200/8-N-1.
+    datain.mode(PullUp);
+    uart.baud(115200);
+    uart.format(8,SerialBus::None,1);
+    while(1){
+    ledice=datain;
+    uart.putc(datain); //posalji podatak s datain 
+    wait_ms(100);
+    if (uart.readable()==1) {
+          pod = uart.getc();
+          led_vanjske=pod;
+          wait_ms(150);
+ }
+}
+}
+
+
+
+#include "mbed.h"
+// slave
+BusOut ledice(LED4,LED3,LED2,LED1);
+Serial uart(p13,p14);
+
+int main () {
+    char pod;
+    uart.baud(115200);
+    uart.format(8,SerialBus::None,1);
+    while(1) {
+      if (uart.readable()==1) {
+          pod = uart.getc();
+          ledice=pod;
+          uart.putc(~ledice);
+          wait_ms(100);
+}
+}
+
+
+4. A
+include "mbed.h"
+//MBED A 
+Serial pc(USBTX, USBRX);
+CAN can(p30,p29);
+DigitalOut led(LED1);
+int main(){
+ char podatak;
+
+ led = 0;
+
+ while (1){
+ pc.printf("Unesite broj: ");
+ pc.scanf("%d",&podatak);
+
+ if (can.write(CANMessage(10,&podatak,1))) {
+ pc.printf("Podatak %d poslan!\n",podatak);
+ led = !led;
+ }
+ else {
+ can.reset();
+ }
+ }
+}
+
+
+
+include "mbed.h"
+//mbed B
+Serial pc(USBTX, USBRX);
+CAN can(p9,p10);
+DigitalOut led(LED1);
+int main(){
+ long podatak;
+ int id;
+ char duljina;
+ CANMessage poruka;
+
+ led = 0;
+
+ while (1){
+ if (can.read(poruka)) {
+ id = poruka.id;
+ duljina = poruka.len;
+ podatak = poruka.data[0];
+ pc.printf("Primljeni podatak: %ld; ID: %d; Duljina:%d\n",podatak,id,duljina);
+ led = !led;
+ }
+ }
+}
+
+
+
+
+5.ZADATAK 
+
+#include "mbed.h"
+// MBED A
+BusOut ledice(LED4,LED3,LED2,LED1);
+BusOut led_vanjske(p21,p22,p23,p24);
+BusIn  datain(p20,p19,p18,p17);
+
+CAN can(p30,p29);
+
+
+int main () {
+    char podatak;
+    CANMessage poruka;
+    datain.mode(PullUp);
+    
+    while(1){
+        podatak=datain;
+        ledice=datain;
+        can.write(CANMessage(10,&podatak,1))
+        wait_ms(100);
+        
+        
+        if (can.read(poruka)){
+            led_vanjske=poruka.data[0];
+        }
+    }
+
+
+
+#include "mbed.h"
+// MBED B
+CAN can(p9,p10);
+BusOut ledice(LED4,LED3,LED2,LED1);
+int main(){
+
+ char podatak;
+ CANMessage poruka;
+
+ while (1){
+ if (can.read(poruka)) {
+
+ podatak = poruka.data[0];
+ podatak=~podatak;
+ can.write(CANMessage(10,&podatak,1))
+ }
+}
+}

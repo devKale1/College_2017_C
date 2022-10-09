@@ -1,0 +1,164 @@
+#include "mbed.h"
+SPI senzor(p11,p12,p13);
+DigitalOut cs(p10);
+DigitalOut n_shdn(p15);
+CAN can(p30,p29);
+
+R/nW A5 A4 A3 A2 A1 A0 X
+
+1 000000 0
+10000000
+0x80
+1 000001 0
+10000010
+0x82
+
+0x12 = 00010010
+0 010010 0
+00100100
+0x24
+
+
+char salji_data_bajt(char bajt) {
+    senzor.write(bajt);
+    return senzor.write(0x00);
+}
+
+void dohvati_koef(float *a0, float *b1, float *b2, float *c12) {
+    
+    char data;
+    
+    short _a0 = 0, _b1 = 0, _b2 = 0, _c12 = 0;
+    
+    wait_us(1); //tSCS+tHCS+tWCS+margin
+    cs = 0;
+    
+    //get a0
+    /*senzor.write(0x88);
+    data = senzor.write(0x00);
+    _a0 = data << 8;
+    senzor.write(0x8A);
+    data = senzor.write(0x00);
+    _a0 = _a0 | data;*/
+    
+    //get a0
+    data = salji_data_bajt(0x88); //a0 MSByte
+    _a0 = data << 8;
+    data = salji_data_bajt(0x8A); //a0 LSByte
+    _a0 = _a0 | data;
+    
+    //get b1
+    data = salji_data_bajt(0x8C); //b1 MSByte
+    _b1 = data << 8;
+    data = salji_data_bajt(0x8E); //b1 LSByte
+    _b1 = _a0 | data;
+    
+    //get b2
+    data = salji_data_bajt(0x90); //b2 MSByte
+    _b2 = data << 8;
+    data = salji_data_bajt(0x92); //b2 LSByte
+    _b2 = _a0 | data;
+    
+    //get c12
+    data = salji_data_bajt(0x94); //c12 MSByte
+    _c12 = data << 8;
+    data = salji_data_bajt(0x96); //c12 LSByte
+    _c12 = _a0 | data;
+    
+    //send additional 0x00
+    senzor.write(0x00);
+    
+    cs = 1;
+    
+    *a0 = _a0 / 8.0f; // dijelimo s 2^3 jer imamo 3 frakcijska bita u a0, F2 F1 F0
+    *b1 = _b1 / 8192.0f; // 2^13
+    *b2 = _b2 / 16384.0f; //2^14
+    _c12 = _c12 >> 2;
+    *c12 = _c12 / 4194304.0f; //2^22
+    //ili
+    //*c12 = _c12 / 16777216.0f//2^24
+}
+
+void pokreni_mjerenje()
+{
+    wait_us(1);
+    cs = 0;
+    salji_data_bajt(0x24);
+    cs = 1;
+}
+
+float izmjeri_tlak(float a1, float b1, float b2, float c12)
+{
+    char data;
+    unsigned short Padc, Tadc;
+    float Pcomp, P;
+    
+    wait_us(1);
+    cs = 0;
+    
+    data = salji_data_bajt(0x80); // Padc MByte
+    Padc = data << 8;
+    data = salji_data_bajt(0x82); // Padc LSByte
+    Padc = Padc | data;
+    
+    data = salji_data_bajt(0x84); // Tadc MByte
+    Tadc = data << 8;
+    data = salji_data_bajt(0x86); // Tadc LSByte
+    Tadc = Padc | data;
+    
+    senzor.write(0x00);
+    
+    cs = 1;
+    
+    Padc = Padc >> 6;
+    Tadc = Tadc >> 6;
+    
+    Pcomp = a0+(b1+c12*Tadc)*Padc+b2*Tadc;
+    P = Pcomp*65.0f/1023.0f+50.0f;
+    
+    return P;
+}
+
+int main()
+{
+    float a0, b1, b2, c12;
+    float tlak;
+    const int id = 2547;
+    short int_tlak ; // tlak u formaatu Q8.7
+    
+    n_shdn = 1;
+    wait_ms(10);
+    
+    senzor.format(8,0);
+    senzor.frequency(4000000);
+    
+    wait_ms(10);
+    
+    dohvati_koef(&a0, &b1, &b2, &c12);
+    
+    //podaci can
+    can.frequency(50000);
+    CANMessage poruka;
+    char can_data[2];
+    
+    while(1) {
+        n_shdn = 1;
+        wait_ms(5);
+        pokreni_mjerenje();
+        wait_ms(3);
+        tlak = izmjeri_tlak(a0, b1, b2, c12);
+        n_shdn = 0;
+        
+        int_tlak = tlak * 128.0f + 0.5f; // 12.4+0.5=12.9; 12.5+0.5=13
+        can_data[0] = int_tlak >> 7;
+        // int_tlak = I7 I6 I5 I4 I3 I2 I1 I0 F6 F5 F4 F3 F2 F1 F0;
+        // 0b1111111 = 0b01111111 = 0x7F
+        can_data[1] = (int_tlak & 0x7F) << 1;
+        
+        poruka = CANMessage(id, can_data, 2, CANData, CANExtended);
+        
+        can.write(poruka);
+        
+        wait(60);
+    }
+}

@@ -1,0 +1,401 @@
+
+1.#include "mbed.h"
+//master program
+I2C i2c_port(p28, p27); // I2C komunikacija, p28 je SDA, p28 je SCL
+DigitalOut led_w(LED1);
+DigitalOut led_r(LED2);
+Serial pc(USBTX,USBRX);
+int main() {
+ int adr = 0x50; //adresa slavea, 7-bitna ili 80  = 1 0 1 0 0 0 0 
+ int check_w, check_r; //djagnostika
+ char data_out, data_in; //poslani, primljeni podatak
+
+ i2c_port.frequency(100000); //frekvencija prijenosa
+
+ data_out = 0xA2; //podatak je ili 192 ili 11000000
+
+ while(1) {
+ //check_r = i2c_port.read(adr << 1, &data_in, 1, false);
+ //led_r = !check_r;
+ //wait_us(30);
+ check_w = i2c_port.write((adr << 1) & 0xFE,&data_out,1,false);    // pošalji na adresu koju šiftaš za jedan u lijevo i napravi I sa FE MASTER TRANSSIMITER
+ //ke to sad dela
+ /*0 1 0 1 0 0 0 0  ovo je adresa  adresu zapisem, kao 8 bitnu pa dobim 
+ sad ju šiftam za jedan u lijevo 
+ 
+   1 0 1 0 0 0 0 0  ovo je adr<<1
+   1 1 1 1 1 1 1 0 ovo je FE 
+   
+   1 0 1 0 0 0 0 ovo je toèno za sad.
+   ovo je podatak 
+   
+data out je pokazivaè, 1 je duljina 
+    false znaci da nema repeated start.
+ /*Slanje podatka odreðenom slaveu na adresi address; 
+*data oznaèava pokazivaè na niz podataka; length
+oznaèava broj bajtova podataka koji æe se poslati;
+repeated je logièka varijabla koja oznaèava
+ponovljeni start nakon kraja prijenosa, ako je u logièkoj
+jedinici, tj. true 
+int write (int address, const char *data, int length, bool repeated=false)*/
+
+led_w = !check_w;
+ wait_us(1000);
+ //pc.printf("Poslani podatak: %x\nPrimljeni podatak:%x\n",data_out,data_in);
+ //wait(0.5);
+ }
+}
+
+
+
+
+
+
+
+#include "mbed.h"
+//slave program
+I2CSlave slave(p28, p27);
+BusOut ledice(LED4,LED3,LED2,LED1);
+int main() {
+ int i, state = 0, ack;
+ char data_in=0, data_out;
+
+ slave.address(0x50 << 1); //postavi adresu slavea adresa slavea- mi je 1 0 1 0 0 0 0 0   A AK JU SIFTAM ZA 1 U LIJEVO JE 0 1 0 0 0 0 0 0  ILI 64
+ slave.frequency(100000); //FREKVENCIJA
+ ledice = 0;             // POSALJI BINARNI 0000
+
+ while(1) {
+ i = slave.receive();
+ switch (i) {
+ case 0:
+  break;
+ case 1:
+ state = 1;     // ZNAÈI ZA BILO KOJI KE PRIME IMA SVOJ SLUÈAJ RJEŠENJA
+ break;
+ case 2:
+ state = 2;
+ break;
+ case 3:
+ state = 3;
+ break;
+ }
+
+ if (state == 3 || state == 2) {
+ if (i!=0) {
+ slave.read(&data_in,1);                // ZNAÈI AK JE STATE 3 ILI 2  I AK JE I RAZLIÈITO OD NULE  ONDA 
+                                        /*Slave-receiver mod: Èita podatak duljine length bajta sa
+                                        sabirnice; *data oznaèava pokazivaè na niz podataka u koji æe se
+                                        primljeni podaci spremiti; vraæa 0 ako su primljeni svi podaci, a
+                                        vrijednost razlièitu od 0 ako nisu */ 
+                                        // POKAZIVAÈ NA DATA IN, DULJINA 1.
+ }
+ data_out = ~data_in;                  // I ONDA NA DATA OUT POSALJES INVERTIRANI DATA IN
+ }
+ if (state == 1) {
+ ack = slave.write(&data_out,1);       // AK JE STATE =1, ONDA BUDES POSLAL DATA OUT, DULJINE 1
+ if (!ack) state = 3;
+ }
+
+ ledice = data_in;                      //OVO NE ZNAM KE ZNAÈI, ALI LEDICE JE DATA IN JE NORMALNO
+ }
+}
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+? Prenosi li se komunikacijskom linijom prvo najznaèajniji bit ili najmanje-znaèajni bit?
+
+
+PRVO IDE MSB 
+
+
+? Identificirajte START i STOP sekvencu na komunikacijskoj liniji.
+
+treba na oba dvije linije.
+odgovor : Start se identificira kod linije SDA u trenutku ka padne iz 1 u 0 , dok je SCL cijelo vrijeme u 1
+
+Stop se identificira kod SDA u trenutku kad  naraste iz 0 u 1, dok je SCL cijelo vrijeme u 1
+skripta labosi, 2. stranica
+? Analizom valnih oblika signala proèitajte o kojoj se adresi ureðaja radi i koji je podatak poslan.
+
+to ti bude jednostavno prepoznati, jer se bu sve dobro poslalo
+0x50; //adresa slavea, 7-bitna ili 80  = 1 0 1 0 0 0 0 
+0xA2; //podatak je ili 192 ili 11000000
+ 
+? Odredite frekvenciju signala takta na SCL liniji. Koliko vremena pri ovoj frekvenciji rada treba da bi
+završio prijenos jednog bajta podatka komunikacijskom linijom?
+
+znaèi frekvencija bude 100 kHz 
+8/100*10^3= 80 mikro sekundi
+
+
+
+
+? Pronaðite ACK bit za oba poslana bajta i odgovorite je li slave potvrdio primitak podatka ili nije.
+ 
+ znaci 2 bita nakon adrese pogle graf pa bus znal
+ mora ti biti 0 ak je normalno poslano, a 1 ak nije
+
+
+? Promijenite u master programu adresu slavea na 0x60. Pokrenite program i analizirajte sadržaj
+komunikacijske linije. Je li došlo do prijenosa podatka iza poslane adrese? Koja je vrijednost ACK bita?
+Svijetli li sada LED1 na maser mbedu? Povežite to s vrijednošæu koju vraæa funkcija write.
+
+dobiš neke neodreðeno.
+nije došlo.
+ack je 1.
+ne svijetli.
+
+WRITE-> Slanje jednog bajta na sabirnicu; vraæa 1 ako je
+primljen ACK, inaèe vraæa 0
+
+
+
+
+
+? Promijenite adresu u 0x00 i analizirajte što se dogodilo? Podsjetite se što se dogaða kad se na sabirnicu
+pošalje adresa 0.
+GENERAL CALL, oznaèi sve slaveove.
+
+Uklonite znak komentara ispred svih linija u programu za master mbed osim one s naredbom
+pc.printf i wait(0.5). U ovom sluèaju uz slanje podatka slaveu master traži od slavea da mu vrati
+podatak. Normalni slijed komunikacije jest da master prvo šalje naredbu slaveu, a on mu potom odgovara.
+Ovdje je taj slijed obrnut radi lakšeg prikaza signala na analognom osciloskopu. Slave vraæa invertirani
+primljeni podatak. Pokrenite program na master mbedu.
+
+
+
+? Provjerite stanje SDA i SCL linija na osciloskopu. Prepoznajte adresu, ACK bitove, start i stop stanje na
+sabirnici.
+
+To je lagano sad vec 
+
+
+
+
+
+
+
+C ZADATAK
+
+
+
+? Što se postiže upotrebom naredbe receive? Koju vrijednost vraæa ako je slave adresiran za èitanje,
+pisanje ili iako je poslana adresa 0?
+
+RECEIVE Provjerava je li  SLAVE adresiran od strane mastera; ako vrati:
+
+0 - slave nije adresiran, 
+1 - adresiran je za pisanje,
+ 2 -poslana je adresa 0x00,
+ 3 - adresiran je za èitanje
+
+
+
+? Maknite komentar ispred wait_us naredbe u programu za slave mbed. Na osciloskopu gledajte sadržaj
+sabirnice i uoèite što se dogaða u odnosu kad je ta naredba u komentaru? Povežite to s tzv. clock
+stretchingom.
+
+znaèi kod SCL linije bude 0 jedno duze vrijeme, 2 periode
+graf toga nalazi se na 16. stranici I2c- predavanja
+
+Slave ima moguænost pauzirati komunikaciju tako da spusti SCL liniju u logièku nulu
+? To æe napraviti ako npr. nakon što je primio podatak i poslao ACK
+bit treba dodatno vrijeme da obradi podatak i pripremi podatak
+za odgovor
+
+
+
+2. ZADATAK .
+
+
+#include "mbed.h"
+I2C senzor(p28,p27);
+Serial pc(USBTX, USBRX);
+int main() {
+
+ int adr =0x48; //adresa senzora, naci u datasheetu
+ short t_int; //temp. kao 16-bitni podatak
+ float temp; //izracunata temperatura
+ char data_in[2]; //temperatura se vraca kao 16-bitni podatak
+ senzor.frequency(100000);
+ while(1) {
+
+ //posalji pokazivac na temp registar
+ senzor.write(adr<<1,0,1,true);
+ 
+ //posalji zahtjev senzoru da vrati temperaturu
+t_int=senzor.read((adr<<1),data_in,2,false);
+//stanica 7 i 8 iz data sheeta
+
+
+ //obrada primljenog podatka (short) tako da se dobije decimalna
+
+// posmaknuti MSByte tj. data_in[0] za 8 bitova ulijevo u pomoænoj varijabli t_in
+t_int=data_in[0]<<8;
+t_int= t_int | data_in[1];
+t_int=t_int>>5;
+temp=(float) t_int*0.125;
+
+//2. napraviti logièku b
+//3. posmaknuti bitove u varijabli t_int za 5 mjesta udesno
+
+
+//4. pomnožiti t_int sa 0,125 i rezultat spremiti u float varijablu temp 
+
+
+ 
+ 
+ //vrijednost temperature (float); ovdje napišite c++ kod gore
+ //napisanog pseudokoda
+
+ pc.printf("Temperatura: %.3f\n", temp);
+ wait(1);
+ }
+ }
+
+
+
+
+Trebala se je naci adresa 0x48 u datasheetu
+adresa slavea 
+
+znaèi 7. stranica poglavlje 7.3 postoji  adresa slavea
+
+ona ide ovak tam 1 0 0 1 a2 a1 a0
+
+treba se sad vratiti na  https://developer.mbed.org/media/uploads/chris/mbed-014.1_b.pdf ovaj link i tam nutra pronaci crtez 
+tog senzora druga strana prvo lijevo od zaglavljaa.
+
+nutra primjetis da su svi pinovi osim ovog za napajanje i i2c na gnd pa onda su a2 a1 i a0 = 0
+
+pa imas adresu slavea  1 0 0 1 0 0 0 ili 0 x48
+
+
+
+zatim pokazivaè na temp registar
+to isto data sheet, tablica 7.4 register list odmah ispod ove
+
+nutra je Pointer value za temp registar 0  znaèi 0.
+
+to je za ovo senzor.write(adr<<1,0,1,true);
+
+i tjt za ovaj zadatk
+
+
+3. master slave- e njega nisam testitral, jedan je veli da nije skroz dobro pa imam od samboleka, njegov mislim da je dobar pa bumo vidli
+
+
+
+#include "mbed.h"
+ 
+//master
+ 
+BusOut ledice(LED4,LED3,LED2,LED1);
+BusIn  datain(p20,p19,p18,p17);
+BusOut lediceo(p21,p22,p23,p24);
+I2C i2c_port(p28, p27);   // sda, scl
+
+int main() {
+    
+    int adr = 0x50; //adresa slavea, 7-bitna
+    int check_w, check_r; //djagnostika
+    char data_out, data_in;//poslani, primljeni podatak
+    i2c_port.frequency(100000); //frekvencija prijenosa
+    datain.mode(PullUp);
+        
+     while(1) {
+        ledice=datain;
+        //ledice=data_in:
+        data_out=datain;
+        
+        i2c_port.start();
+        check_w = i2c_port.write((adr << 1) & 0xFE);
+        if(check_w) {
+            check_w = i2c_port.write(data_out);
+        }
+        i2c_port.stop();
+        
+        lediceo=~datain;
+        
+        wait_us(100);
+        
+        //i2c_port.start();
+        //check_r = i2c_port.write((adr << 1) | 0x01);
+        //if(check_r) {
+            //data_in = i2c_port.read(0);
+        //}
+        //i2c_port.stop();
+        
+        //ledice=data_in:
+        
+        
+    }
+}
+
+3.zad slave
+#include "mbed.h"
+ 
+//slave program
+ 
+I2CSlave slave(p28, p27);
+BusOut ledice(LED4,LED3,LED2,LED1);
+ 
+int main() {
+    int i, state = 0, ack;
+    char data_in=0, data_out;
+    
+    slave.address(0x50<< 1); //postavi adresu slavea
+    slave.frequency(100000);
+    ledice = 0;
+   
+    while (1){
+        i = slave.receive();
+        switch(i) {
+            case 0: break;
+            case 1: 
+                state = 1;
+                break;
+            case 2: 
+                state = 2;
+                break;
+            case 3:
+                state = 3;
+                break;
+            }
+            
+        if(state == 3|| state == 2) {
+            if(i!=0) {
+                slave.read(&data_in,1);
+            }
+            //data_out = ~data_in;
+        }
+        
+        //if(state == 1) {
+            //wait_us(20);
+          //  ack = slave.write(&data_out,1);
+            //if(!ack) state = 3;
+        //}
+        ledice = data_in;
+    }
+}
+
+
+? Sjetite se zadnjeg zadatka na prošlim vježbama. Koliko ste na njima izraèunali da je moguæe prikljuèiti
+slave ureðaja na jedan master za prijenos 4-bitnog podatka, koliko za prijenos 8-bitnog, a koliko za prijenos
+16 bitnog? Koliko slave ureðaja je moguæe prikljuèiti na master ako se koristi I2C komunikacija za prijenos
+4, 8 ili 16 bitnog podatka?
+nisam odgovoril na pitanje ali 
+

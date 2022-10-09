@@ -1,0 +1,251 @@
+
+
+
+1. zadatak 
+
+
+#include "mbed.h"
+DigitalOut led1(LED1);
+DigitalOut led2(LED2);
+DigitalOut led3(LED3);
+DigitalOut led4(LED4);
+DigitalIn switchInput(p8);
+int main (){
+    int switchState;
+    while(1){
+    switchInput.mode(PullUp);
+    switchState = switchInput;
+    if(switchState==0){
+        led1=1;
+        wait_ms(250);
+        led1=0;
+        led2=1;
+        wait_ms(250);
+        led2=0;
+        led3=1;
+        wait_ms(250);
+        led3=0;
+        led4=1;
+        wait_ms(250);
+        led4=0;
+        led3=1;
+        wait_ms(250);
+        led3=0;
+        led2=1;
+        wait_ms(250);
+        led2=0;
+        
+        
+    }
+    }
+    }
+
+2. zadatak
+
+#include "mbed.h"
+BusOut sabirnica(LED1, LED2, LED3, LED4); //napravi kao polje
+int main() {
+ while(1) {
+ sabirnica.write(1);   // na ove ledice zapisat æe se broj 1, ali s time da je, poèinje od nule, vidi definiciju bus out, znaèi pali se  led 1
+ // jer su vrijednosti ledica 1 2 4 8 , znaci pali se prva skroz lijeva...
+ wait(1); 
+ sabirnica = 2; // isto kao write samo je skraceno, pali se led 2 
+ wait(1);
+ sabirnica = sabirnica.read() + 1; // procita se vrijednost tadasnja koja je 2 i doda se jedan, pa imamo broj 3 odnosno pale se led 1 i led 2
+ wait(1);
+ int sab = sabirnica; 
+ sabirnica = sab + 3; // sab je bila 3 i dodajemo 3, pa se pali binarni 6, to jest, pali se led 2 i led 3
+ wait(1);
+ sabirnica = 0b1111; // pale se sve ledice
+ wait(1);
+ sabirnica[0] = 0; // i sada ce se ledica s indexom nula ugasiti, tj. kao prvi èlan polja led 1 ce se ugasiti, a svjetliju od prije led2,3,4;
+ wait(1);
+ }
+}
+
+
+
+Pažljivom analizom trebali biste uoèiti koji pin u BusOut objektu je MSB (najznaèajniji bit), a koji LSB
+(najmanje znaèajni bit).
+
+Pažljivo veliš da je LSB LED 1, A MSB LED 4 BusOut ima (pin0,pin1,pin2,pin3...), znaèi obrnuto nego bi to bilo kad bi 
+napisal binarne brojeve, cijelu tablicu onu.
+
+
+
+
+
+3.zadatak
+
+#include "mbed.h"
+BusOut ledice(LED1, LED2, LED3, LED4);
+DigitalIn kontrola(p8);
+int main() {
+ kontrola.mode(PullUp);
+ while(1) {
+ if (kontrola){
+ ledice = 0b0000;
+ }
+ if (!kontrola) {
+ ledice = 0b0001;
+ wait(0.25);
+ ledice = 0b0010;
+ wait(0.25);
+ ledice = 0b0100;
+ wait(0.25);
+ ledice = 0b1000;  // znaci samo upisivamo binarne brojeve na LED1, LED2,LED3,LED4
+ wait(0.25);
+ ledice = 0b0100;
+ wait(0.25);
+ ledice = 0b0010;
+ wait(0.25);
+ if (kontrola){
+ ledice = 0b0000;
+ }
+ }
+ }
+}
+
+
+
+
+PROGRAM ZA MASTER
+#include "mbed.h"
+//master program za paralelnu komunikaciju
+BusOut dataout(p21,p22,p23,p24);
+BusOut ledice(LED4,LED3,LED2,LED1);
+DigitalOut strobe(p25);
+DigitalIn busy(p26);
+BusIn datain(p20,p19,p18,p17);
+int main() {
+ datain.mode(PullUp);
+ strobe = 1; //inicijaliziraj strobe liniju
+ wait(2);
+ while(1) {
+ ledice = datain;
+
+ dataout = datain;
+ wait(0.1);
+ strobe = 0;
+ wait(0.1);
+ strobe = 1;
+
+ wait(4); //cekaj novi ciklus, nepoznato vrijeme obrade slavea
+ }
+}
+
+
+PROGRAM ZA SLAVE
+
+#include "mbed.h"
+//slave program za paralelnu komunikaciju
+BusOut ledice(LED4,LED3,LED2,LED1);
+DigitalIn strobe(p16);
+DigitalOut busy(p15);
+BusIn datain(p20,p19,p18,p17);
+int main() {
+ int strobe_prev = 0;
+
+ //inicijalizacija
+ busy = 1; //zauzet za prihvat podataka radi inicijalizacije
+ strobe_prev = strobe;
+ wait(1);
+ busy = 0;
+ //inicijalizacija gotova
+
+ while(1) {
+ if (strobe_prev == 1 && strobe == 0){
+ busy = 1;
+ ledice = datain;
+ wait(1); //vrijeme obrade
+ busy = 0;
+ }
+ strobe_prev = strobe;
+ wait(0.05);
+ }
+}
+
+
+ Koja je uloga strobe_prev varijable????
+
+Pogledaš graf strobe linije.
+u kodu imas ;
+if (strobe_prev == 1 && strobe == 0)
+
+znaèi, mi zelimo zapoceti obradu, na padajuci brid strobe linije, s toga strobe je prije trebala biti u 1, a sad je u 0
+
+Razmislite s koliko najviše ureðaja može jedan mbed komunicirati preko paralelne komunikacije kakvu
+smo implementirali u ovom zadatku? Koliki bi bio broj ureðaja da je širina podatkovne linije 8-bita?
+
+Imaš 26 pina na raspolaganju. za korištenje
+
+Preko 4-bitne komunikacije moreš s 3 slave komunicirati
+
+Treba ti za svaki slave 2 busy 2strobe i 4 podatkovne, za svaki slave ti treba 8 linija, pa najvec mores 3
+
+a za 8-bitnu to ti je 2 slave jer imas 8 podatkovnih, pa je to onda 12 i onda je najvec 2
+
+
+
+MASTER-REDEFINIRANI PROGRAM
+#include "mbed.h"
+//master program za paralelnu komunikaciju
+BusInOut dataout(p21,p22,p23,p24);
+BusInOut ledice(LED4,LED3,LED2,LED1);
+DigitalOut strobe(p25);
+DigitalIn busy(p26);
+BusInOut datain(p20,p19,p18,p17);
+int main() {
+ dataout.output();
+ ledice.output();
+ datain.input();
+ datain.mode(PullUp);
+ strobe = 1; //inicijaliziraj strobe liniju
+ wait(2);
+ while(1) {
+     if(busy==0){
+ ledice = datain;
+
+ dataout = datain;
+ //wait_ms(100);
+ strobe = 0;
+ wait_ms(100);
+ strobe = 1;
+
+ //wait(4); //cekaj novi ciklus, nepoznato vrijeme obrade slavea
+ }
+ }
+}
+
+
+SLAVE_REDEFINIRANI
+
+#include "mbed.h"
+//slave program za paralelnu komunikaciju
+BusOut ledice(LED4,LED3,LED2,LED1); // postavi svoje ledice kao busOut
+DigitalIn strobe(p16); // prima s mastera prek strobe
+DigitalOut busy(p15);  // daje masteru prek busy
+BusIn datain(p20,p19,p18,p17); // ulazi su tak definirani
+int main() {
+ int strobe_prev = 0; // valjda kakva je bila prije linija strobe a trebala bi biti  nej rekel da 0 nek 1 
+
+ //inicijalizacija
+ busy = 1; //zauzet za prihvat podataka radi inicijalizacije, nije u moguænosti prihvatiti podatke i onda mu pošalje 1
+ strobe_prev = strobe; //gleda kaj mu je master poslal, a on mu je poslal 1 
+ wait_ms(100);    
+ busy = 0;
+ //inicijalizacija gotova
+
+ while(1) {
+ if (strobe_prev == 1 && strobe == 0){ //znaci ak je strobe_prev u 1 i strobe u 0, onda znaci da je videl ke mu je master poslal i da moze citati, jer ga treba staviti u 0
+ busy = 1; // nije u mogucnosti vec prihvatiti podatke
+ ledice = datain;  // sad je poslal s datain na ledice, tu se dogaða komunikacija izmeðu 2 mbed-a
+ wait_ms(100); //vrijeme obrade
+ busy = 0; //moze sad primiti podatke
+ }
+ strobe_prev = strobe; // postavimo u strobe previus kakvo je bilo prije
+ wait_ms(50); //pocekaj malo
+ 
+ }
+}
+
