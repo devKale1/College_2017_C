@@ -24,3 +24,5 @@ Ktm_lab_5 :
 Za razliku od zadatka na prethodnim vježbama u ovom zadatku će se koristiti asinkrona serijska komunikacijska veza.
 4. CAN komunikacija
 5. U prvoj vježbi zadatak je bio kontinuirano slati 4-bitni podatak preko paralelne komunikacijske linije s master mbeda na slave mbed. 4-bitni podatak zadaje se položajem sklopki S0 (pin20) do S3 (pin17), gdje sklopka S0 predstavlja najmanje značajni bit, a S3 najznačajniji bit. Za razliku od zadatka na prethodnim vježbama i trećeg zadatka u ovoj vježbi u ovom zadatku za istu funkcionalnost treba upotrijebiti CAN komunikacijski protokol.
+
+Ostali dokumenti su primjer SPI komunikacije te zadatci za vježbu koji su prethodno opisani gore.
